@@ -1,6 +1,6 @@
 /**
- * luasurface_demo.d
- * Demonstrate the wrapped Surface objects.
+ * luasgrid_demo.d
+ * Demonstrate the wrapped StructuredGrid objects.
  *
  * Authors: Rowan G. and Peter J.
  * Version: 2015-02-24
