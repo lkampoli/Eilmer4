@@ -18,7 +18,7 @@ set key left top
 set xrange [0:1.2]
 set yrange [0:20]
 plot "./profile-at-x1m-march.dat" using ((\$6)/1390.0):((0.44-\$2)*1000) \
-     title "e3march.py" with points pt 1, \
+     title "block-march" with points pt 1, \
      "../boundary-layer-profile-clbl.data" using (\$3):((\$2)*1000) \
      title "CLBL" with lines lt 1
 EOF
@@ -33,7 +33,7 @@ set key left top
 set xrange [0:1.2]
 set yrange [0:20]
 plot "./profile-at-x1m-march.dat" using ((\$5)/0.011835):((0.44-\$2)*1000) \
-     title "e3march.py" with points pt 1, \
+     title "block-march" with points pt 1, \
      "../boundary-layer-profile-clbl.data" using (\$5):((\$2)*1000) \
      title "CLBL" with lines lt 1
 EOF
