@@ -3,7 +3,7 @@
 #
 # This exercises quite a few of the basic functions of the unstructured-grid code.
 #
-# PJ, 11-Jan-2011 (Eilmer4 port 2015-10-21, unstructured-grid 2015-12-21)
+# PJ, 11-Jan-2011 (Eilmer4 port 2015-10-21, unstructured-grid 2015-12-21, with shock angle 2016-11-13)
 #
 # Can be run manually with the command:
 # $ tclsh cone20-usg.test
@@ -97,7 +97,28 @@ test pressure-on-cone-surface {The expected pressure on the cone surface.} -body
     set q_inf [expr 0.5 * 0.3029 * 1.0e6]; # dynamic pressure for free stream
     set p_cone_surface [expr 95.84e3 + 0.387 * $q_inf]
     # puts "p=$p, q_inf=$q_inf, p_cone_surface=$p_cone_surface"
-    list [expr abs($p - $p_cone_surface) < 5.0e3]
+    list [expr abs($p - $p_cone_surface) < 6.0e2]
 } -result {1}
+
+test shock-angle {The shock angle should be close to 49 degrees.} -body {
+    set shock_angle 0
+    set average_deviation 0
+    if { [catch {exec e4shared --custom-post --script-file=estimate_shock_angle.lua} results] } {
+        puts "specialized postprocessing command failed"
+        puts $results
+    } else {
+	foreach line [split $results "\n"] {
+	    if {[string first shock_angle_deg $line] >= 0} {
+		set shock_angle [lindex [split $line] 1]
+	    }
+	    if {[string first average_deviation_metres $line] >= 0} {
+		set average_deviation [lindex [split $line] 1]
+	    }
+	}
+    }
+    # The shock wave angle should be within 1 degree of expected
+    # and average deviation of points should be less than 3mm (more lax than the structured grid). 
+    list [expr abs($shock_angle - 49.547) < 1.0] [expr $average_deviation < 0.003]
+} -result {1 1}
 
 cleanupTests
