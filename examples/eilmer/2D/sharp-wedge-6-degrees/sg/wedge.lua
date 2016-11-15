@@ -94,6 +94,7 @@ blk.bcList[west] = InFlowBC_Supersonic:new{flowCondition=inflow}
 -- Set simulation parameters
 config.interpolation_order = 2
 config.print_count = 1
+config.flux_calculator = "adaptive"
 SteadyStateSolver{
    use_preconditioning = false,
    -- sigma = 1.0e-6, -- presently it's computed internally
