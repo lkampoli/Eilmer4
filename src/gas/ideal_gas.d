@@ -30,7 +30,7 @@ public:
 	_n_modes = 0;
 	// Bring table to TOS
 	lua_getglobal(L, "IdealGas");
-	// Let's overwrite that here.
+	// There's just one species name to be read from the gas-model file.
 	_species_names.length = 1;
 	_species_names[0] = getString(L, -1, "speciesName");
 	// Now, pull out the remaining numeric value parameters.
@@ -101,7 +101,6 @@ public:
     {
 	Q.Ttr = Q.p/(Q.rho*_Rgas);
 	Q.u = _Cv*Q.Ttr;
-	
     }
     
     override void update_thermo_from_ps(GasState Q, double s) const
