@@ -11,7 +11,7 @@
  * reacting gas model and as a flow-solver verification tool.
  *
  * Authors: Peter J. and Rowan G.
- * Version: 2016-01-07: initial cut.
+ * Version: 2017-01-07: initial cut.
  */
 
 module gas.powers_aslam_gas;
