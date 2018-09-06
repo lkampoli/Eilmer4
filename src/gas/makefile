@@ -72,7 +72,7 @@ demo: ${DEMO_PROGRAMS}
 
 clean:
 	- rm *.o
-	- rm ideal_air_fortran.mod
+	- rm *.mod
 	- rm ${DEMO_PROGRAMS}
 	- rm ${TEST_PROGRAMS}
 	- rm gas.so
@@ -83,6 +83,10 @@ clean:
 	- rm trans.inp trans.lib trans.out
 	- rm tmp.inp tmp.out tmp.plt
 	- cd $(LUA); make clean
+	- rm $(KINETICS_DIR)/pseudosp_solve_ode.o
+	- rm $(KINETICS_DIR)/pseudosp_rhs_ode.o
+	- rm $(KINETICS_DIR)/dvode.o
+	- rm $(KINETICS_DIR)/updatepseudospecieschem.mod
 
 # Specific targets for individual artefacts.
 
@@ -272,6 +276,10 @@ steam_test: $(GAS_FILES) $(KINETICS_FILES) $(UTIL_FILES) $(NM_FILES) $(LIBLUA)
 		$(GAS_FILES) $(KINETICS_FILES) $(UTIL_FILES) $(NM_FILES) $(DLINKFLAGS)
 
 pseudo_species_gas_test: $(GAS_FILES) $(KINETICS_FILES) $(UTIL_FILES) $(NM_FILES) $(LIBLUA)
+	$(DMD) $(OF)$@ -debug -g -w -version=$@ \
+		$(GAS_FILES) $(KINETICS_FILES) $(UTIL_FILES) $(NM_FILES) $(DLINKFLAGS)
+
+electronically_specific_gas_test: $(GAS_FILES) $(KINETICS_FILES) $(UTIL_FILES) $(NM_FILES) $(LIBLUA)
 	$(DMD) $(OF)$@ -debug -g -w -version=$@ \
 		$(GAS_FILES) $(KINETICS_FILES) $(UTIL_FILES) $(NM_FILES) $(DLINKFLAGS)
 

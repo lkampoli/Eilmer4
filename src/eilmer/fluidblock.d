@@ -305,12 +305,12 @@ public:
             auto cL = iface.left_cell;
             auto cR = iface.right_cell;
             if (cL && cR) {
-                number uL = cL.fs.vel.x * iface.n.x + cL.fs.vel.y * iface.n.y + cL.fs.vel.z * iface.n.z;
-                number uR = cR.fs.vel.x * iface.n.x + cR.fs.vel.y * iface.n.y + cR.fs.vel.z * iface.n.z;
+                number uL = geom.dot(cL.fs.vel, iface.n);
+                number uR = geom.dot(cR.fs.vel, iface.n);
                 number aL = cL.fs.gas.a;
                 number aR = cR.fs.gas.a;
-                number a_min = fmin(aL, aR);
-                iface.fs.S = ((uR - uL) / a_min < tol);
+                number a_min = (aL < aR) ? aL : aR;
+                iface.fs.S = ((uR - uL)/a_min) < tol;
             } else {
                 iface.fs.S = 0;
             }
@@ -450,7 +450,7 @@ public:
     @nogc
     void clear_fluxes_of_conserved_quantities()
     {
-        foreach (iface; faces) { iface.F.clear_values(); }
+        foreach (iface; faces) { iface.F.clear(); }
     }
 
     void viscous_flux()
@@ -531,6 +531,27 @@ public:
         }
     } // end compute_Linf_residuals()
 
+    @nogc
+    void residual_smoothing_dUdt(size_t ftl)
+    {
+        assert(ftl < cells[0].dUdt.length, "inconsistent flow time level and allocated dUdt");
+        foreach (c; cells) {
+            c.dUdt_copy.copy_values_from(c.dUdt[ftl]);
+        }
+        double eps = myConfig.residual_smoothing_weight;
+        foreach (c; cells) {
+            double total = 1.0;
+            foreach (i, f; c.iface) {
+                total += eps;
+                auto other_cell = (c.outsign[i] > 0.0) ? f.right_cell : f.left_cell;
+                if (other_cell && other_cell.is_interior) {
+                    c.dUdt[ftl].add(other_cell.dUdt_copy, eps);
+                }
+            }
+            c.dUdt[ftl].scale(1.0/total);
+        }
+    } // end residual_smoothing_dUdt()
+    
     double update_c_h(double dt_current)
     // Update the c_h value for the divergence cleaning mechanism.
     {

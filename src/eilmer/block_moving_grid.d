@@ -27,7 +27,7 @@ import fluidblock;
 import sfluidblock;
 import geom;
 
-
+@nogc
 int set_gcl_interface_properties(SFluidBlock blk, size_t gtl, double dt) {
     size_t i, j, k;
     FVInterface IFace;
@@ -42,20 +42,26 @@ int set_gcl_interface_properties(SFluidBlock blk, size_t gtl, double dt) {
             vtx1 = blk.get_vtx(i,j,k);
             vtx2 = blk.get_vtx(i,j+1,k);
             IFace = blk.get_ifi(i,j,k);         
-            pos1 = vtx1.pos[gtl] - vtx2.pos[0];
-            pos2 = vtx2.pos[gtl] - vtx1.pos[0];
-            averaged_ivel = (vtx1.vel[0] + vtx2.vel[0]) / 2.0;
+            pos1 = vtx1.pos[gtl];
+            pos1 -= vtx2.pos[0];
+            pos2 = vtx2.pos[gtl];
+            pos2 -= vtx1.pos[0];
+            averaged_ivel = vtx1.vel[0];
+            averaged_ivel += vtx2.vel[0];
+            averaged_ivel.scale(0.5);
             // Use effective edge velocity
             // Reference: D. Ambrosi, L. Gasparini and L. Vigenano
             // Full Potential and Euler solutions for transonic unsteady flow
             // Aeronautical Journal November 1994 Eqn 25
+            cross(vol, pos1, pos2);
             if (blk.myConfig.axisymmetric == false) {
-                vol = 0.5 * cross( pos1, pos2 );
+                // vol = 0.5*cross(pos1, pos2);
+                vol.scale(0.5);
+            } else {
+                // vol=0.5*cross(pos1, pos2)*((vtx1.pos[gtl].y+vtx1.pos[0].y+vtx2.pos[gtl].y+vtx2.pos[0].y)/4.0);
+                vol.scale(0.125*(vtx1.pos[gtl].y+vtx1.pos[0].y+vtx2.pos[gtl].y+vtx2.pos[0].y));
             }
-            else {
-                vol = 0.5 * cross( pos1, pos2 ) * ( ( vtx1.pos[gtl].y + vtx1.pos[0].y + vtx2.pos[gtl].y + vtx2.pos[0].y ) / 4.0 );
-            }
-            temp = vol / ( dt * IFace.area[0] );
+            temp = vol; temp /= dt*IFace.area[0];
             // temp is the interface velocity (W_if) from the GCL
             // interface area determined at gtl 0 since GCL formulation
             // recommends using initial interfacial area in calculation.
@@ -72,26 +78,27 @@ int set_gcl_interface_properties(SFluidBlock blk, size_t gtl, double dt) {
             vtx1 = blk.get_vtx(i,j,k);
             vtx2 = blk.get_vtx(i+1,j,k);
             IFace = blk.get_ifj(i,j,k);
-            pos1 = vtx2.pos[gtl] - vtx1.pos[0];
-            pos2 = vtx1.pos[gtl] - vtx2.pos[0];
-            averaged_ivel = (vtx1.vel[0] + vtx2.vel[0]) / 2.0;
+            pos1 = vtx2.pos[gtl]; pos1 -= vtx1.pos[0];
+            pos2 = vtx1.pos[gtl]; pos2 -= vtx2.pos[0];
+            averaged_ivel = vtx1.vel[0]; averaged_ivel += vtx2.vel[0]; averaged_ivel.scale(0.5);
+            cross(vol, pos1, pos2);
             if (blk.myConfig.axisymmetric == false) {
-                vol = 0.5 * cross( pos1, pos2 );
-            }
-            else {
-                vol = 0.5 * cross( pos1, pos2 ) * ( ( vtx1.pos[gtl].y + vtx1.pos[0].y + vtx2.pos[gtl].y + vtx2.pos[0].y ) / 4.0 );
+                // vol=0.5*cross( pos1, pos2 );
+                vol.scale(0.5);
+            } else {
+                // vol=0.5*cross(pos1, pos2)*((vtx1.pos[gtl].y+vtx1.pos[0].y+vtx2.pos[gtl].y+vtx2.pos[0].y)/4.0);
+                vol.scale(0.125*(vtx1.pos[gtl].y+vtx1.pos[0].y+vtx2.pos[gtl].y+vtx2.pos[0].y));
             }
             IFace.gvel.transform_to_local_frame(IFace.n, IFace.t1, IFace.t2);
             averaged_ivel.transform_to_local_frame(IFace.n, IFace.t1, IFace.t2);  
             if (blk.myConfig.axisymmetric && j == blk.jmin && IFace.area[0] == 0.0) {
-                // For axis symmetric cases the cells along the axis of symmetry have 0 interface area,
+                // For axi-symmetric cases the cells along the axis of symmetry have 0 interface area,
                 // this is a problem for determining Wif, so we have to catch the NaN from dividing by 0.
                 // We choose to set the y and z directions to 0, but take an averaged value for the
                 // x-direction so as to not force the grid to be stationary, defeating the moving grid's purpose.
                 IFace.gvel.set(averaged_ivel.x, to!number(0.0), to!number(0.0));
-            }
-            else {
-                temp = vol / ( dt * IFace.area[0] );
+            } else {
+                temp = vol; temp /= dt*IFace.area[0];
                 IFace.gvel.set(temp.z, averaged_ivel.y, averaged_ivel.z);
             }
             averaged_ivel.transform_to_global_frame(IFace.n, IFace.t1, IFace.t2);           
@@ -138,12 +145,16 @@ int set_gcl_interface_properties(SFluidBlock blk, size_t gtl, double dt) {
                     volume += sub_volume; 
                     //
                     IFace = blk.get_ifi(i,j,k);         
-                    averaged_ivel = (vtx0.vel[0] + vtx1.vel[0] + vtx2.vel[0] + vtx3.vel[0]) / 4.0;
+                    averaged_ivel = vtx0.vel[0];
+                    averaged_ivel += vtx1.vel[0];
+                    averaged_ivel += vtx2.vel[0];
+                    averaged_ivel += vtx3.vel[0];
+                    averaged_ivel.scale(0.25);
                     // Use effective face velocity, analoguous to edge velocity concept
                     // Reference: D. Ambrosi, L. Gasparini and L. Vigenano
                     // Full Potential and Euler solutions for transonic unsteady flow
                     // Aeronautical Journal November 1994 Eqn 25
-                    temp2 = volume / ( dt * IFace.area[0] );
+                    temp2 = volume; temp /= dt*IFace.area[0];
                     // temp2 is the interface velocity (W_if) from the GCL
                     // interface area determined at gtl 0 since GCL formulation
                     // recommends using initial interfacial area in calculation.
@@ -187,12 +198,16 @@ int set_gcl_interface_properties(SFluidBlock blk, size_t gtl, double dt) {
                     volume += sub_volume; 
                     // 
                     IFace = blk.get_ifj(i,j,k);         
-                    averaged_ivel = (vtx0.vel[0] + vtx1.vel[0] + vtx2.vel[0] + vtx3.vel[0]) / 4.0;
+                    averaged_ivel = vtx0.vel[0];
+                    averaged_ivel += vtx1.vel[0];
+                    averaged_ivel += vtx2.vel[0];
+                    averaged_ivel += vtx3.vel[0];
+                    averaged_ivel.scale(0.25);
                     // Use effective face velocity, analoguous to edge velocity concept
                     // Reference: D. Ambrosi, L. Gasparini and L. Vigenano
                     // Full Potential and Euler solutions for transonic unsteady flow
                     // Aeronautical Journal November 1994 Eqn 25
-                    temp2 = volume / ( dt * IFace.area[0] );
+                    temp2 = volume; temp /= dt*IFace.area[0];
                     // temp2 is the interface velocity (W_if) from the GCL
                     // interface area determined at gtl 0 since GCL formulation
                     // recommends using initial interfacial area in calculation.
@@ -236,12 +251,16 @@ int set_gcl_interface_properties(SFluidBlock blk, size_t gtl, double dt) {
                     volume += sub_volume; 
                     //
                     IFace = blk.get_ifk(i,j,k);         
-                    averaged_ivel = (vtx0.vel[0] + vtx1.vel[0] + vtx2.vel[0] + vtx3.vel[0]) / 4.0;
+                    averaged_ivel = vtx0.vel[0];
+                    averaged_ivel += vtx1.vel[0];
+                    averaged_ivel += vtx2.vel[0];
+                    averaged_ivel += vtx3.vel[0];
+                    averaged_ivel.scale(0.25);
                     // Use effective face velocity, analoguous to edge velocity concept
                     // Reference: D. Ambrosi, L. Gasparini and L. Vigenano
                     // Full Potential and Euler solutions for transonic unsteady flow
                     // Aeronautical Journal November 1994 Eqn 25
-                    temp2 = volume / ( dt * IFace.area[0] );
+                    temp2 = volume; temp2 /= dt*IFace.area[0];
                     // temp2 is the interface velocity (W_if) from the GCL
                     // interface area determined at gtl 0 since GCL formulation
                     // recommends using initial interfacial area in calculation.
@@ -470,7 +489,8 @@ void shock_fitting_vertex_velocities(SFluidBlock blk, int step, double sim_time)
                     ws2 = dot(u_lft, ns) - temp1 * temp2;
                     interface_ws[jOffSet] = (0.5*ws1 + (1-0.5)*ws2)*ns;
                     // tav is a unit vector which points from the neighbouring interface to the current vertex
-                    tav = (vtx.pos[0]-iface_neighbour.pos)/sqrt(dot(vtx.pos[0] - iface_neighbour.pos, vtx.pos[0] - iface_neighbour.pos));
+                    Vector3 del1 = vtx.pos[0] - iface_neighbour.pos;
+                    tav = (del1)/geom.abs(del1);
                     M = dot(u_rght, tav)/cell.fs.gas.a; // equation explained in Ian Johnston's thesis on page 77, note...
                     // we are currently just using the right cell (i.e. first non-ghost cell) as the "post-shock" value, for higher accuracy
                     // we will need to update this with the right hand side reconstructed value.
@@ -546,8 +566,10 @@ Vector3 correct_direction(Vector3 unit_d, Vector3 pos, Vector3 left_pos, Vector3
     // originating from the EAST boundary spanning to the west
     Vector3 lft_temp;
     Vector3 rght_temp;
-    lft_temp = (pos-left_pos)/sqrt(dot(left_pos - pos, left_pos - pos));
-    rght_temp = (right_pos-pos)/sqrt(dot(right_pos-pos, right_pos-pos));
+    Vector3 delL = pos-left_pos;
+    Vector3 delR = right_pos-pos;
+    lft_temp = delL/geom.abs(delL);
+    rght_temp = delR/geom.abs(delR);
     unit_d = 0.5 * (lft_temp + rght_temp); // take an average of the left and right unit vectors
     if (i == imin) unit_d = rght_temp;     // west boundary vertex has no left neighbour
     if (i == imax+1) unit_d = lft_temp;    // east boundary vertex has no right neighbour

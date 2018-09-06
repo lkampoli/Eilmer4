@@ -183,6 +183,27 @@ public:
         }
     }
 
+    final void massf2numden(in GasState Q, number[] numden)
+    in {
+        assert(Q.massf.length == numden.length, brokenPreCondition("Inconsistent array lengths."));
+    }
+    body {
+        foreach ( i; 0.._n_species ) {
+            numden[i] = Avogadro_number*Q.massf[i]*Q.rho / _mol_masses[i];
+        }
+    }
+
+    final void numden2massf(in number[] numden, GasState Q)
+    in {
+        assert(Q.massf.length == numden.length, brokenPreCondition("Inconsistent array lengths."));
+    }
+    body {
+        foreach ( i; 0.._n_species ) {
+            Q.massf[i] = numden[i]*_mol_masses[i] / (Avogadro_number*Q.rho);
+            if ( Q.massf[i] < MIN_MASS_FRACTION ) Q.massf[i] = 0.0;
+        }
+    }
+
 protected:
     // These data need to be properly initialized by the derived class.
     uint _n_species;
@@ -1047,6 +1068,7 @@ import gas.vib_specific_nitrogen;
 import gas.fuel_air_mix;
 import gas.equilibrium_gas;
 import gas.steam : Steam;
+import gas.electronically_specific_gas: ElectronicallySpecificGas;
 
 import core.stdc.stdlib : exit;
 
@@ -1143,6 +1165,9 @@ GasModel init_gas_model(string file_name="gas-model.lua")
         break;
     case "Steam":
         gm = new Steam();
+        break;
+    case "ElectronicallySpecificGas":
+        gm = new ElectronicallySpecificGas(L);
         break;
     default:
         string errMsg = format("The gas model '%s' is not available.", gas_model_name);

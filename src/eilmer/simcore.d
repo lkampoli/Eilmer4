@@ -862,11 +862,23 @@ void integrate_in_time(double target_time_as_requested)
             t_loads = t_loads + GlobalConfig.dt_loads;
             GC.collect();
         }
-        // 5. For steady-state approach, check the residuals for mass and energy.
+        // 5. Update the run-time loads calculation, if required
+        if (GlobalConfig.compute_run_time_loads) {
+            version(mpi_parallel) {
+                // Do not attempt to update run time loads.
+                // Need to think about how to coordinate this globally.
+            }
+            else {
+                if ( (step / GlobalConfig.run_time_loads_count) * GlobalConfig.run_time_loads_count == step ) {
+                    computeRunTimeLoads();
+                }
+            }
+        }
+        // 6. For steady-state approach, check the residuals for mass and energy.
 
-        // 6. Spatial filter may be applied occasionally.
+        // 7. Spatial filter may be applied occasionally.
 
-        // 7. Loop termination criteria:
+        // 8. Loop termination criteria:
         //    (1) reaching a maximum simulation time or target time
         //    (2) reaching a maximum number of steps
         //    (3) finding that the "halt_now" parameter has been set 
@@ -1011,11 +1023,7 @@ void set_grid_velocities(double sim_time, int step, int gtl, double dt_global)
             }
             break;
         case GridMotion.user_defined:
-            // First set all velocities to zero.
-            foreach (blk; parallel(localFluidBlocksBySize,1)) {
-                if (blk.active) { foreach (iface; blk.faces) { iface.gvel.clear(); } }
-            }
-            // Then rely on use to set those with actual velocities.
+            // Rely on user to set vertex velocities. Velocities remain unchanged if the user does nothing.
             assign_vertex_velocities_via_udf(sim_time, dt_global);
             break;
         case GridMotion.shock_fitting:
@@ -1161,7 +1169,10 @@ void gasdynamic_explicit_increment_with_fixed_grid()
                                         local_sim_time, blk.myConfig.gmodel);
             }
             cell.time_derivatives(local_gtl, local_ftl, local_with_k_omega);
-            bool force_euler = false;
+        }
+        if (blk.myConfig.residual_smoothing) { blk.residual_smoothing_dUdt(local_ftl); }
+        bool force_euler = false;
+        foreach (cell; blk.cells) {
             cell.stage_1_update_for_flow_on_fixed_grid(local_dt_global, force_euler,
                                                        local_with_k_omega);
             cell.decode_conserved(local_gtl, local_ftl+1, blk.omegaz);
@@ -1317,6 +1328,9 @@ void gasdynamic_explicit_increment_with_fixed_grid()
                                             local_sim_time, blk.myConfig.gmodel);
                 }
                 cell.time_derivatives(local_gtl, local_ftl, local_with_k_omega);
+            }
+            if (blk.myConfig.residual_smoothing) { blk.residual_smoothing_dUdt(local_ftl); }
+            foreach (cell; blk.cells) {
                 cell.stage_2_update_for_flow_on_fixed_grid(local_dt_global, local_with_k_omega);
                 cell.decode_conserved(local_gtl, local_ftl+1, blk.omegaz);
             } // end foreach cell
@@ -1464,6 +1478,9 @@ void gasdynamic_explicit_increment_with_fixed_grid()
                                             local_sim_time, blk.myConfig.gmodel);
                 }
                 cell.time_derivatives(local_gtl, local_ftl, local_with_k_omega);
+            }
+            if (blk.myConfig.residual_smoothing) { blk.residual_smoothing_dUdt(local_ftl); }
+            foreach (cell; blk.cells) {
                 cell.stage_3_update_for_flow_on_fixed_grid(local_dt_global, local_with_k_omega);
                 cell.decode_conserved(local_gtl, local_ftl+1, blk.omegaz);
             } // end foreach cell
