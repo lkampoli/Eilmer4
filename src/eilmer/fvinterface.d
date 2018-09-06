@@ -56,12 +56,6 @@ public:
     // maybe for a boundary without ghost cells.
     FVCell left_cell;      // interface normal points out of this adjoining cell
     FVCell right_cell;     // interface normal points into this adjoining cell
-    // The following flags will be set later, when cells are assigned.
-    // Active cells are considered interior to block; ghost cells exterior.
-    // The unstructured-grid will only set the flag true as interior cells are attached,
-    // so a false default value will be handy to indicate a ghost cell.
-    bool left_cell_is_interior = false;
-    bool right_cell_is_interior = false;
     //
     // Flow
     FlowState fs;          // Flow properties
@@ -105,7 +99,7 @@ public:
         double[] T_modes; foreach(i; 0 .. n_modes) { T_modes ~= 300.0; }
         fs = new FlowState(gmodel, 100.0e3, T, T_modes, Vector3(0.0,0.0,0.0));
         F = new ConservedQuantities(n_species, n_modes);
-        F.clear_values();
+        F.clear();
         grad = new FlowGradients(myConfig);
         if (allocate_spatial_deriv_lsq_workspace) {
             ws_grad = new WLSQGradWorkspace();
@@ -114,8 +108,8 @@ public:
         jy.length = n_species;
         jz.length = n_species;
         version(shape_sensitivity) {
-            dFdU.length = 5; // number of conserved variables
-            foreach (ref a; dFdU) a.length = 5;
+            dFdU.length = 7; // number of conserved variables
+            foreach (ref a; dFdU) a.length = 7;
             foreach (i; 0..dFdU.length) {
                 foreach (j; 0..dFdU[i].length) {
                     dFdU[i][j] = 0.0;
@@ -254,6 +248,7 @@ public:
         return to!string(repr);
     }
 
+    @nogc
     void update_2D_geometric_data(size_t gtl, bool axisymmetric)
     {
         number xA = vtx[0].pos[gtl].x;
@@ -266,7 +261,7 @@ public:
             // normal is purely in the xy-plane
             n.set((yB-yA)/LAB, -(xB-xA)/LAB, to!number(0.0));
             t2 = Vector3(0.0, 0.0, 1.0);
-            t1 = cross(n, t2);
+            cross(t1, n, t2);
             length = LAB; // Length in the XY-plane.
         } else {
             n = Vector3(1.0, 0.0, 0.0); // Arbitrary direction
@@ -282,9 +277,10 @@ public:
         } else {
             area[gtl] = LAB; // Assume unit depth in the Z-direction.
         }
-        pos = to!number(0.5)*(vtx[0].pos[gtl] + vtx[1].pos[gtl]);
+        pos = vtx[0].pos[gtl]; pos += vtx[1].pos[gtl]; pos *= to!number(0.5);
     } // end update_2D_geometric_data()
 
+    // @nogc
     void update_3D_geometric_data(size_t gtl)
     {
         switch (vtx.length) {
@@ -302,6 +298,7 @@ public:
             string msg = "FVInterface.update_3D_geometric_data(): ";
             msg ~= format("Unhandled number of vertices: %d", vtx.length);
             throw new FlowSolverException(msg);
+            // assert(0, "unhandled number of vertices"); // for @nogc
         } // end switch     
     } // end update_3D_geometric_data()
 
@@ -327,13 +324,13 @@ public:
         if (myConfig.use_viscosity_from_cells) {
             // Emulate Eilmer3 behaviour by using the viscous transport coefficients
             // from the cells either side of the interface.
-            if (left_cell_is_interior && right_cell_is_interior) {
+            if (left_cell && right_cell && left_cell.is_interior && right_cell.is_interior) {
                 k_laminar = 0.5*(left_cell.fs.gas.k+right_cell.fs.gas.k);
                 mu_laminar = 0.5*(left_cell.fs.gas.mu+right_cell.fs.gas.mu);
-            } else if (left_cell_is_interior) {
+            } else if (left_cell && left_cell.is_interior) {
                 k_laminar = left_cell.fs.gas.k;
                 mu_laminar = left_cell.fs.gas.mu;
-            } else if (right_cell_is_interior) {
+            } else if (right_cell && right_cell.is_interior) {
                 k_laminar = right_cell.fs.gas.k;
                 mu_laminar = right_cell.fs.gas.mu;
             } else {
@@ -345,11 +342,11 @@ public:
         number lmbda = -2.0/3.0 * mu_eff;
         //
         number local_pressure;
-        if (left_cell_is_interior && right_cell_is_interior) {
+        if (left_cell && right_cell && left_cell.is_interior && right_cell.is_interior) {
             local_pressure = 0.5*(left_cell.fs.gas.p+right_cell.fs.gas.p);
-        } else if (left_cell_is_interior) {
+        } else if (left_cell && left_cell.is_interior) {
             local_pressure = left_cell.fs.gas.p;
-        } else if (right_cell_is_interior) {
+        } else if (right_cell && right_cell.is_interior) {
             local_pressure = right_cell.fs.gas.p;
         } else {
             assert(0, "Oops, don't seem to have a cell available.");
@@ -536,7 +533,7 @@ public:
             // First, select the 2 points.
             number x0, x1, y0, y1, z0, z1;
             number velx0, velx1, vely0, vely1, velz0, velz1, T0, T1;
-            if (left_cell_is_interior && right_cell_is_interior) {
+            if (left_cell && right_cell && left_cell.is_interior && right_cell.is_interior) {
                 x0 = left_cell.pos[0].x; x1 = right_cell.pos[0].x;
                 y0 = left_cell.pos[0].y; y1 = right_cell.pos[0].y;
                 z0 = left_cell.pos[0].z; z1 = right_cell.pos[0].z;
@@ -544,7 +541,7 @@ public:
                 vely0 = left_cell.fs.vel.y; vely1 = right_cell.fs.vel.y;
                 velz0 = left_cell.fs.vel.z; velz1 = right_cell.fs.vel.z;
                 T0 = left_cell.fs.gas.T; T1 = right_cell.fs.gas.T;
-            } else if (left_cell_is_interior) {
+            } else if (left_cell && left_cell.is_interior) {
                 x0 = left_cell.pos[0].x; x1 = pos.x;
                 y0 = left_cell.pos[0].y; y1 = pos.y;
                 z0 = left_cell.pos[0].z; z1 = pos.z;
@@ -552,7 +549,7 @@ public:
                 vely0 = left_cell.fs.vel.y; vely1 = fs.vel.y;
                 velz0 = left_cell.fs.vel.z; velz1 = fs.vel.z;
                 T0 = left_cell.fs.gas.T; T1 = fs.gas.T;
-            } else if (right_cell_is_interior) {
+            } else if (right_cell && right_cell.is_interior) {
                 x0 = pos.x; x1 = right_cell.pos[0].x;
                 y0 = pos.y; y1 = right_cell.pos[0].y;
                 z0 = pos.z; z1 = right_cell.pos[0].z;
@@ -579,11 +576,11 @@ public:
                 veln1 += velz1*nz;
             } 
             number veln_face;
-            if (left_cell_is_interior && right_cell_is_interior) {
+            if (left_cell && right_cell && left_cell.is_interior && right_cell.is_interior) {
                 veln_face = 0.5*(veln0+veln1);
-            } else if (left_cell_is_interior) {
+            } else if (left_cell && left_cell.is_interior) {
                 veln_face = veln1;
-            } else if (right_cell_is_interior) {
+            } else if (right_cell && right_cell.is_interior) {
                 veln_face = veln0;
             }
             number ke0 = 0.5*(velx0^^2 + vely0^^2 + velz0^^2);

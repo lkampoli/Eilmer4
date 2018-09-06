@@ -83,9 +83,9 @@ extern(C) int set_vtx(lua_State* L)
     // Note that we expect 0 <= i < niv
     size_t j = 0; if (narg > 3) { j = to!size_t(luaL_checkint(L, 3)); }
     size_t k = 0; if (narg > 4) { k = to!size_t(luaL_checkint(L, 4)); }
-        Vector3* vtx = checkVector3(L, narg);
-        Vector3* grid_vtx = grid[i,j,k];
-        grid_vtx.set(*vtx);
+    Vector3* vtx = checkVector3(L, narg);
+    Vector3* grid_vtx = grid[i,j,k];
+    grid_vtx.set(vtx);
     return 0;
 }
 
@@ -478,6 +478,32 @@ extern(C) int importGridproGrid(lua_State *L)
     return 1;
 } // end importGridproGrid()
 
+extern(C) int importPlot3DGrid(lua_State *L)
+{
+    int narg = lua_gettop(L);
+    if ( narg < 2 ) {
+        string errMsg = "Error in call to importPlot3DGrid(). " ~
+            "At least two arguments are required: the name of the Gridpro file and the dimensionality (2 or 3).";
+        luaL_error(L, errMsg.toStringz);
+    }
+    auto fname = to!string(luaL_checkstring(L, 1));
+    
+    int dim = luaL_checkint(L, 2);
+
+    double scale = 1.0;
+    if ( narg >= 3 ) {
+        scale = luaL_checknumber(L, 3);
+    }
+    auto sgrids = geom.grid.sgrid.importPlot3DGrid(fname, dim, scale);
+    lua_newtable(L);
+    foreach (int i, grid; sgrids) {
+        structuredGridStore ~= pushObj!(StructuredGrid, StructuredGridMT)(L, grid);
+        lua_rawseti(L, -2, i+1);
+    }
+    return 1;
+} // end importPlot3DGrid()
+
+
 extern(C) int writeGridsAsPlot3D(lua_State *L)
 {
     int narg = lua_gettop(L);
@@ -594,6 +620,8 @@ void registerStructuredGrid(lua_State* L)
     // Global functions available for use
     lua_pushcfunction(L, &importGridproGrid);
     lua_setglobal(L, "importGridproGrid");
+    lua_pushcfunction(L, &importPlot3DGrid);
+    lua_setglobal(L, "importPlot3DGrid");
     lua_pushcfunction(L, &writeGridsAsPlot3D);
     lua_setglobal(L, "writeGridsAsPlot3D");
     lua_pushcfunction(L, &rotateGridproBlocks);

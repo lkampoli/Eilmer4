@@ -98,6 +98,13 @@ struct Vector3 {
         return this;
     }
 
+    @nogc ref Vector3 set(Vector3* other)
+    // Convenience function for setting the components of an existing object.
+    {
+        _p[0] = other._p[0]; _p[1] = other._p[1]; _p[2] = other._p[2];
+        return this;
+    }
+
     @nogc ref Vector3 set(number x, number y, number z=to!number(0.0))
     // Convenience function for setting the components of an existing object.
     // Note that we may supply just the x,y coordinates.
@@ -131,6 +138,66 @@ struct Vector3 {
         _p[0] += other._p[0]; _p[1] += other._p[1]; _p[2] += other._p[2];
         return this;
     }
+
+    @nogc ref Vector3 add(Vector3* other)
+    // Convenience function for adding the components of an existing object.
+    // This avoids the temporary associated with += (below)
+    {
+        _p[0] += other._p[0]; _p[1] += other._p[1]; _p[2] += other._p[2];
+        return this;
+    }
+
+    @nogc ref Vector3 add(ref const(Vector3) other, number factor)
+    // Convenience function for adding the components of an existing object, scaled.
+    // This avoids the temporary associated with += (below)
+    {
+        _p[0] += other._p[0]*factor; _p[1] += other._p[1]*factor; _p[2] += other._p[2]*factor;
+        return this;
+    }
+
+    @nogc ref Vector3 add(Vector3* other, number factor)
+    // Convenience function for adding the components of an existing object, scaled.
+    // This avoids the temporary associated with += (below)
+    {
+        _p[0] += other._p[0]*factor; _p[1] += other._p[1]*factor; _p[2] += other._p[2]*factor;
+        return this;
+    }
+
+    @nogc ref Vector3 scale(number factor)
+    // Convenience function for scaling the components of an existing object.
+    // This avoids the temporary associated with *= (below)
+    {
+        _p[0] *= factor; _p[1] *= factor; _p[2] *= factor;
+        return this;
+    }
+    
+    version(complex_numbers) {
+        // We want to retain the flavour with double numbers.
+
+        @nogc ref Vector3 add(ref const(Vector3) other, double factor)
+        // Convenience function for adding the components of an existing object, scaled.
+        // This avoids the temporary associated with += (below)
+        {
+            _p[0] += other._p[0]*factor; _p[1] += other._p[1]*factor; _p[2] += other._p[2]*factor;
+            return this;
+        }
+
+        @nogc ref Vector3 add(Vector3* other, double factor)
+        // Convenience function for adding the components of an existing object, scaled.
+        // This avoids the temporary associated with += (below)
+        {
+            _p[0] += other._p[0]*factor; _p[1] += other._p[1]*factor; _p[2] += other._p[2]*factor;
+            return this;
+        }
+
+        @nogc ref Vector3 scale(double factor)
+        // Convenience function for scaling the components of an existing object.
+        // This avoids the temporary associated with *= (below)
+        {
+            _p[0] *= factor; _p[1] *= factor; _p[2] *= factor;
+            return this;
+        }
+    } // end version complex_numbers
     
     string toString() const
     {
@@ -244,61 +311,70 @@ struct Vector3 {
     } // end version complex_numbers
 
     // Assignment operators. (Alexandrescu Section 7.1.5.1)
-    @nogc ref Vector3 opAssign(ref Vector3 rhs)
+    @nogc void opAssign(ref Vector3 rhs)
     {
         _p[0] = rhs._p[0]; _p[1] = rhs._p[1]; _p[2] = rhs._p[2];
-        return this;
     }
 
-    @nogc ref Vector3 opAssign(Vector3 rhs)
+    @nogc void opAssign(Vector3 rhs)
     {
         _p[0] = rhs._p[0]; _p[1] = rhs._p[1]; _p[2] = rhs._p[2];
-        return this;
     }
 
     // Combined assignment operators do change the original object.
-    @nogc ref Vector3 opOpAssign(string op)(in Vector3 rhs)
+    @nogc void opOpAssign(string op)(in Vector3 rhs)
         if (op == "+")
     {
-        this._p[0] += rhs._p[0]; this._p[1] += rhs._p[1]; this._p[2] += rhs._p[2];
-        return this;
+        _p[0] += rhs._p[0]; _p[1] += rhs._p[1]; _p[2] += rhs._p[2];
     }
 
-    @nogc ref Vector3 opOpAssign(string op)(in Vector3 rhs)
+    @nogc void opOpAssign(string op)(in Vector3 rhs)
         if (op == "-")
     {
-        this._p[0] -= rhs._p[0]; this._p[1] -= rhs._p[1]; this._p[2] -= rhs._p[2];
-        return this;
+        _p[0] -= rhs._p[0]; _p[1] -= rhs._p[1]; _p[2] -= rhs._p[2];
     }
 
-    @nogc ref Vector3 opOpAssign(string op)(in number rhs)
+    // 2018-08-28 PJ found that to call from within @nogc functions,
+    // we had to use ref const(Vector3) rather than in Vector3
+    // as the type of the parameter rhs.
+    // So, we now have two sets of these combined-operator assignments
+    // but the compiler seems to be able to pick the one it needs.
+    @nogc void opOpAssign(string op)(ref const(Vector3) rhs)
+        if (op == "+")
+    {
+        _p[0] += rhs._p[0]; _p[1] += rhs._p[1]; _p[2] += rhs._p[2];
+    }
+
+    @nogc void opOpAssign(string op)(ref const(Vector3) rhs)
+        if (op == "-")
+    {
+        _p[0] -= rhs._p[0]; _p[1] -= rhs._p[1]; _p[2] -= rhs._p[2];
+    }
+
+    @nogc void opOpAssign(string op)(in number rhs)
         if (op == "*")
     {
-        this._p[0] *= rhs; this._p[1] *= rhs; this._p[2] *= rhs;
-        return this;
+        _p[0] *= rhs; _p[1] *= rhs; _p[2] *= rhs;
     }
 
-    @nogc ref Vector3 opOpAssign(string op)(in number rhs)
+    @nogc void opOpAssign(string op)(in number rhs)
         if (op == "/")
     {
-        this._p[0] /= rhs; this._p[1] /= rhs; this._p[2] /= rhs;
-        return this;
+        _p[0] /= rhs; _p[1] /= rhs; _p[2] /= rhs;
     }
 
     version(complex_numbers) {
         // Retain the double version.
-        @nogc ref Vector3 opOpAssign(string op)(in double rhs)
+        @nogc void opOpAssign(string op)(in double rhs)
             if (op == "*")
         {
-            this._p[0] *= rhs; this._p[1] *= rhs; this._p[2] *= rhs;
-            return this;
+            _p[0] *= rhs; _p[1] *= rhs; _p[2] *= rhs;
         }
 
-        @nogc ref Vector3 opOpAssign(string op)(in double rhs)
+        @nogc void opOpAssign(string op)(in double rhs)
             if (op == "/")
         {
-            this._p[0] /= rhs; this._p[1] /= rhs; this._p[2] /= rhs;
-            return this;
+            _p[0] /= rhs; _p[1] /= rhs; _p[2] /= rhs;
         }
     } // end version complex_numbers
 
@@ -307,7 +383,7 @@ struct Vector3 {
     /**
      * Scales the vector to unit magnitude.
      */
-    @nogc ref Vector3 normalize()
+    @nogc void normalize()
     {
         number magnitude = sqrt(this.dot(this));
         if (magnitude > 0.0) {
@@ -328,7 +404,6 @@ struct Vector3 {
             if (fabs(this._p[1]) < small) { this._p[1] = 0.0; }
             if (fabs(this._p[2]) < small) { this._p[2] = 0.0; }
         }
-        return this;
     }
 
     @nogc number dot(ref const(Vector3) other) const
@@ -485,7 +560,7 @@ struct Vector3 {
  * Returns the distance between two points.
  */
 @nogc
-double distance_between(ref const Vector3 v1, ref const Vector3 v2)
+double distance_between(ref const(Vector3) v1, ref const(Vector3) v2)
 {
     number d = sqrt((v1.x-v2.x)^^2 + (v1.y-v2.y)^^2 + (v1.z-v2.z)^^2);
     return d.re;
@@ -495,11 +570,11 @@ double distance_between(ref const Vector3 v1, ref const Vector3 v2)
  * Returns the scalar dot product of two vectors.
  */
 @nogc
-number dot(in Vector3 v1, in Vector3 v2)
+number dot(ref const(Vector3) v1, ref const(Vector3) v2)
 {
     number result = 0.0;
     // Maybe we should be careful with underflow and overflow...
-    foreach(i; 0 .. 3) { result += v1._p[i] * v2._p[i]; }
+    result = v1._p[0]*v2._p[0] + v1._p[1]*v2._p[1] + v1._p[2]*v2._p[2];
     return result;
 }
 
@@ -518,7 +593,8 @@ number abs(ref const(Vector3) v)
 Vector3 unit(ref const(Vector3) v)
 {
     Vector3 v2 = Vector3(v);
-    return v2.normalize();
+    v2.normalize();
+    return v2;
 }
 
 /**
