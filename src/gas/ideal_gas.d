@@ -206,7 +206,7 @@ private:
     double _Prandtl;
     ThermalConductivity _thermCondModel;
 
-} // end class Ideal_gas
+} // end class IdealGas
 
 version(ideal_gas_test) {
     import std.stdio;
