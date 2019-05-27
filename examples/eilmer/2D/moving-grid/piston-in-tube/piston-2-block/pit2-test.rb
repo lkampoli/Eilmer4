@@ -1,3 +1,4 @@
+#! /usr/bin/env ruby
 # pit2-test.rb
 # Tests for the piston-in-tube example, 2 FluidBlock case.
 # PJ, 2019-05-20
@@ -16,7 +17,7 @@ class TestPIT2 < Test::Unit::TestCase
   end
 
   def test_1_run
-    cmd = "mpirun -np 2 e4mpi --job=pit2 --run"
+    cmd = "mpirun -np 2 e4mpi --run --job=pit2"
     o, e, s = Open3.capture3(*cmd.split)
     assert_equal(s.success?, true)
     steps = 0
@@ -55,6 +56,6 @@ class TestPIT2 < Test::Unit::TestCase
         energy_error = items[2].to_f
       end
     end
-    assert((energy_error - 229).abs < 100.0, "Failed to get small energy error.")
+    assert(energy_error.abs < 500.0, "Failed to get small energy error.")
   end
 end
