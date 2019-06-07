@@ -61,7 +61,7 @@ enum FlowVar {
     mu_t, k_t, S,
     Q_rad_org, f_rad_org, Q_rE_rad,
     tke, omega,
-    dt_chem, u, T, dt_therm
+    dt_local, dt_chem, u, T, dt_therm
 };
 
 @nogc
@@ -94,6 +94,7 @@ string flowVarName(FlowVar var)
     case FlowVar.Q_rE_rad: return "Q_rE_rad";
     case FlowVar.tke: return "tke";
     case FlowVar.omega: return "omega";
+    case FlowVar.dt_local: return "dt_local";
     case FlowVar.dt_chem: return "dt_chem";
     case FlowVar.u: return "u";
     case FlowVar.T: return "T";
@@ -440,7 +441,11 @@ final class GlobalConfig {
     shared static size_t n_flow_time_levels = 3;
     shared static bool residual_smoothing = false;
     shared static double residual_smoothing_weight = 0.2;
-
+    shared static ResidualSmoothingType residual_smoothing_type = ResidualSmoothingType.explicit;
+    shared static int residual_smoothing_iterations = 2;
+    shared static bool with_local_time_stepping = false;
+    shared static int local_time_stepping_limit_factor = 10000;
+    
     // Parameter controlling Strang-splitting mode when simulating reacting flows
     shared static StrangSplittingMode strangSplitting = StrangSplittingMode.full_T_full_R;
     
@@ -784,6 +789,7 @@ final class GlobalConfig {
             list ~= [u_modesName(i), T_modesName(i)];
         }
         if (gmodel_master.n_modes > 0) { list ~= flowVarName(FlowVar.dt_therm); }
+        list ~= flowVarName(FlowVar.dt_local);
         return list;
     } // end variable_list_for_flow_data()
 
@@ -803,7 +809,8 @@ public:
     GasdynamicUpdate gasdynamic_update_scheme;
     size_t n_flow_time_levels;
     bool residual_smoothing;
-    double residual_smoothing_weight;
+    bool with_local_time_stepping;
+    int local_time_stepping_limit_factor;
     GridMotion grid_motion;
     string udf_grid_motion_file;
     size_t n_grid_time_levels;
@@ -922,7 +929,8 @@ public:
         gasdynamic_update_scheme = GlobalConfig.gasdynamic_update_scheme;
         n_flow_time_levels = GlobalConfig.n_flow_time_levels;
         residual_smoothing = GlobalConfig.residual_smoothing;
-        residual_smoothing_weight = GlobalConfig.residual_smoothing_weight;
+        with_local_time_stepping = GlobalConfig.with_local_time_stepping;
+        local_time_stepping_limit_factor = GlobalConfig.local_time_stepping_limit_factor;
         grid_motion = GlobalConfig.grid_motion;
         udf_grid_motion_file = GlobalConfig.udf_grid_motion_file;
         n_grid_time_levels = GlobalConfig.n_grid_time_levels;
@@ -1201,7 +1209,8 @@ void read_config_file()
     mixin(update_enum("gasdynamic_update_scheme", "gasdynamic_update_scheme", "update_scheme_from_name"));
     GlobalConfig.n_flow_time_levels = 1 + number_of_stages_for_update_scheme(GlobalConfig.gasdynamic_update_scheme);
     mixin(update_bool("residual_smoothing", "residual_smoothing"));
-    mixin(update_double("residual_smoothing_weight", "residual_smoothing_weight"));
+    mixin(update_bool("with_local_time_stepping", "with_local_time_stepping"));
+    mixin(update_int("local_time_stepping_limit_factor", "local_time_stepping_limit_factor"));
     mixin(update_enum("grid_motion", "grid_motion", "grid_motion_from_name"));
     if (GlobalConfig.grid_motion == GridMotion.none) {
         GlobalConfig.n_grid_time_levels = 1;
@@ -1275,7 +1284,8 @@ void read_config_file()
     if (GlobalConfig.verbosity_level > 1) {
         writeln("  gasdynamic_update_scheme: ", gasdynamic_update_scheme_name(GlobalConfig.gasdynamic_update_scheme));
         writeln("  residual_smoothing: ", GlobalConfig.residual_smoothing);
-        writeln("  residual_smoothing_weight: ", GlobalConfig.residual_smoothing_weight);
+        writeln("  with_local_time_stepping: ", GlobalConfig.with_local_time_stepping);
+        writeln("  local_time_stepping_limit_factor: ", GlobalConfig.local_time_stepping_limit_factor);
         writeln("  grid_motion: ", grid_motion_name(GlobalConfig.grid_motion));
         writeln("  write_vertex_velocities: ", GlobalConfig.write_vertex_velocities);
         writeln("  udf_grid_motion_file: ", to!string(GlobalConfig.udf_grid_motion_file));
@@ -1654,6 +1664,9 @@ void read_control_file()
     mixin(update_bool("stringent_cfl", "stringent_cfl"));
     mixin(update_double("viscous_signal_factor", "viscous_signal_factor"));
     mixin(update_double("turbulent_signal_factor", "turbulent_signal_factor"));
+    mixin(update_enum("residual_smoothing_type", "residual_smoothing_type", "residual_smoothing_type_from_name"));
+    mixin(update_double("residual_smoothing_weight", "residual_smoothing_weight"));
+    mixin(update_int("residual_smoothing_iterations", "residual_smoothing_iterations"));
     mixin(update_bool("fixed_time_step", "fixed_time_step"));
     mixin(update_int("print_count", "print_count"));
     mixin(update_int("cfl_count", "cfl_count"));
@@ -1671,6 +1684,9 @@ void read_control_file()
         writeln("  stringent_cfl: ", GlobalConfig.stringent_cfl);
         writeln("  viscous_signal_factor: ", GlobalConfig.viscous_signal_factor);
         writeln("  turbulent_signal_factor: ", GlobalConfig.turbulent_signal_factor);
+        writeln("  residual_smoothing_type: ", GlobalConfig.residual_smoothing_type);
+        writeln("  residual_smoothing_weight: ", GlobalConfig.residual_smoothing_weight);
+        writeln("  residual_smoothing_iterations: ", GlobalConfig.residual_smoothing_iterations);
         writeln("  fixed_time_step: ", GlobalConfig.fixed_time_step);
         writeln("  print_count: ", GlobalConfig.print_count);
         writeln("  cfl_count: ", GlobalConfig.cfl_count);
