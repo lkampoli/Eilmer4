@@ -671,22 +671,50 @@ public:
     {
         assert(ftl < cells[0].dUdt.length, "inconsistent flow time level and allocated dUdt");
         foreach (c; cells) {
-            c.dUdt_copy.copy_values_from(c.dUdt[ftl]);
+            c.dUdt_copy[0].copy_values_from(c.dUdt[ftl]);
+            c.dUdt_copy[1].copy_values_from(c.dUdt[ftl]);
         }
-        double eps = myConfig.residual_smoothing_weight;
-        foreach (c; cells) {
-            double total = 1.0;
-            foreach (i, f; c.iface) {
-                total += eps;
-                auto other_cell = (c.outsign[i] > 0.0) ? f.right_cell : f.left_cell;
-                if (other_cell && other_cell.contains_flow_data) {
-                    c.dUdt[ftl].add(other_cell.dUdt_copy, eps);
+        double eps = GlobalConfig.residual_smoothing_weight;
+        if (GlobalConfig.residual_smoothing_type == ResidualSmoothingType.explicit) { 
+            foreach (c; cells) {
+                double total = 1.0;
+                foreach (i, f; c.iface) {
+                    total += eps;
+                    auto other_cell = (c.outsign[i] > 0.0) ? f.right_cell : f.left_cell;
+                    if (other_cell && other_cell.contains_flow_data) {
+                        c.dUdt[ftl].add(other_cell.dUdt_copy[0], eps);
+                    }
+                }
+                c.dUdt[ftl].scale(1.0/total);
+            }
+        } else { // ResidualSmoothingType.implicit
+            int n_iters = GlobalConfig.residual_smoothing_iterations;
+            // perform Jacobi iterations
+            foreach (ni; 0..n_iters) {
+                foreach (c; cells) {
+                    double n = 0;
+                    c.dUdt_copy[1].copy_values_from(c.dUdt[ftl]);
+                    foreach (i, f; c.iface) {
+                        auto other_cell = (c.outsign[i] > 0.0) ? f.right_cell : f.left_cell;
+                        if (other_cell && other_cell.contains_flow_data) {
+                            n += 1;
+                            c.dUdt_copy[1].add(other_cell.dUdt_copy[0], eps);
+                        }
+                    }
+                    double scale = 1.0+n*eps;
+                    c.dUdt_copy[1].scale(1.0/scale);
+                }
+                foreach (c; cells) {
+                    c.dUdt_copy[0].copy_values_from(c.dUdt_copy[1]);
                 }
             }
-            c.dUdt[ftl].scale(1.0/total);
+            // replace residual with smoothed residual
+            foreach (c; cells) {
+                c.dUdt[ftl].copy_values_from(c.dUdt_copy[1]);
+            }
         }
     } // end residual_smoothing_dUdt()
-
+    
     @nogc
     double update_c_h(double dt_current)
     // Update the c_h value for the divergence cleaning mechanism.
@@ -731,11 +759,19 @@ public:
         case 3: cfl_allow = 1.6; break;
         default: cfl_allow = 0.9;
         }
+        // when using residual smoothing (implicit) we should be able to achieve a higher stable CFL
+        // so let's relax the cfl_allow
+        if (myConfig.residual_smoothing &&
+            myConfig.with_local_time_stepping &&
+            GlobalConfig.residual_smoothing_type == ResidualSmoothingType.implicit) cfl_allow *= 10.0;
+        int local_time_stepping_limit_factor = myConfig.local_time_stepping_limit_factor; // for local time-stepping we limit the larger time-steps by a factor of the smallest timestep
         bool first = true;
         foreach(FVCell cell; cells) {
             signal = cell.signal_frequency();
             cfl_local = dt_current * signal; // Current (Local) CFL number
             dt_local = cfl_value / signal; // Recommend a time step size.
+            cell.dt_local = fmin(dt_local, dt_current*local_time_stepping_limit_factor); // set local time-step in cell
+            cell.dt_local = fmin(cell.dt_local, GlobalConfig.dt_max); // Limit the largest local time-step to a set input value
             if (first) {
                 cfl_min = cfl_local;
                 cfl_max = cfl_local;
