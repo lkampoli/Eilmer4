@@ -38,8 +38,8 @@ for i = 0, 2 do
 end
 identifyBlockConnections()
 -- The diaphragm boundary condition is between FluidBlocks [1] and [2]
-blks[1].bcList[east] = UserDefinedBC:new{fileName="udf-diaphragm.lua"}
-blks[2].bcList[west] = UserDefinedBC:new{fileName="udf-diaphragm.lua"}
+blks[1].bcList[east] = UserDefinedGhostCellBC:new{fileName="udf-diaphragm.lua"}
+blks[2].bcList[west] = UserDefinedGhostCellBC:new{fileName="udf-diaphragm.lua"}
 -- The following setting is important for UDF BCs that sample cell data
 -- from other blocks.
 config.apply_bcs_in_parallel = false 
