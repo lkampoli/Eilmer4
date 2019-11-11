@@ -7,7 +7,7 @@
 require 'test/unit'
 require 'open3'
 
-class TestCone20 < Test::Unit::TestCase
+class TestN90 < Test::Unit::TestCase
   def test_0_prep
     cmd = "prep-gas nitrogen-2sp.inp nitrogen-2sp.lua"
     o, e, s = Open3.capture3(*cmd.split)
