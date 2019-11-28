@@ -15,7 +15,7 @@ state1.T = 300.0 # K
 state1.update_thermo_from_pT()
 state1.update_sound_speed()
 print("state1: %s" % state1)
-print("normal shock, given shock speed")
+print("normal shock (in ideal gas), given shock speed")
 vs = 2414.0
 state2 = GasState(gmodel)
 flow = GasFlow(gmodel)
