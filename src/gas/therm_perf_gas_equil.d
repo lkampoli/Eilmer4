@@ -17,6 +17,7 @@ import nm.number;
 import gas.gas_model;
 import gas.gas_state;
 import gas.therm_perf_gas;
+import ceq;
 
 class ThermallyPerfectGasEquilibrium: ThermallyPerfectGas {
 public:
@@ -24,7 +25,6 @@ public:
     // Construct the model from parameters that are contained in a Lua interpreter,
     // but delegate all of the hard work to Rowan's ThermallyPerfectGas.
     {
-        writeln("Warning! Equilibrium gas model under construction.");
         super(L);
 
         // Build arrays to mimic pyeq memory management
@@ -51,6 +51,31 @@ public:
         this(L);
         lua_close(L); // We no longer need the Lua interpreter.
     } // end constructor from a Lua file
+
+version(complex_numbers){
+    // This... Has turned into a difficult situation...
+    override void update_thermo_from_pT(GasState Q) 
+    {
+        throw new Error("Do not use with complex numbers.");
+    }
+} else {
+    override void update_thermo_from_pT(GasState Q) 
+    {
+        int error;
+        massf2molef(Q, X0); 
+        error = ceq.pt(Q.p,Q.T,X0ptr,nsp,nel,lewisptr,Mptr,aptr,X1ptr,0);
+        molef2massf(X1, Q);
+        _pgMixEOS.update_density(Q);
+        _tpgMixEOS.update_energy(Q);
+    }
+}
+
+private:
+    int nel,nsp;
+    double[string][] element_map;
+    string[] element_set;
+    double[] a,X0,X1,lewis;
+    double* aptr, X0ptr, X1ptr, lewisptr, Mptr, Tptr;
 
     void compile_lewis_array(lua_State* L, ref double[] _lewis){
         /*
@@ -90,7 +115,6 @@ public:
         double[string] species_elements;
 
         foreach(species; _species_names){
-            writeln(species);
             species_elements.clear();
             lua_getglobal(L, "db");
             lua_getfield(L, -1, species.toStringz);
@@ -160,13 +184,6 @@ public:
         return;
     }
 
-private:
-    int nel,nsp;
-    double[string][] element_map;
-    string[] element_set;
-    double[] a,X0,X1,lewis;
-    double* aptr, X0ptr, X1ptr, lewisptr, Mptr, Tptr;
-
 } // end class ThermallyPerfectGasEquilibrium
 
 version(therm_perf_gas_equil_test) {
@@ -179,18 +196,19 @@ version(therm_perf_gas_equil_test) {
         // Copied from https://dlang.org/library/std/math/floating_point_control.html
         fpctrl.enableExceptions(FloatingPointControl.severeExceptions);
         //
-        auto gm = new ThermallyPerfectGasEquilibrium("sample-data/therm-perf-5-species-air.lua");
+        auto gm = new ThermallyPerfectGasEquilibrium("sample-data/therm-perf-equil-5-species-air.lua");
         auto gd = new GasState(5, 0);
-        assert(approxEqual(3.621, gm.LJ_sigmas[0]), failedUnitTest());
-        assert(approxEqual(97.530, gm.LJ_epsilons[0]), failedUnitTest());
 
-        gd.p = 1.0e6;
-        gd.T = 2000.0;
-        gd.massf = [0.2, 0.2, 0.2, 0.2, 0.2];
+        gd.p = 0.1*101.35e3;
+        gd.T = 2500.0;
+        gd.massf = [0.74311527, 0.25688473, 0.0, 0.0, 0.0];
         gm.update_thermo_from_pT(gd);
-        assert(approxEqual(11801825.6, gd.u, 1.0e-6), failedUnitTest());
-        assert(approxEqual(1.2840117, gd.rho, 1.0e-6), failedUnitTest());
-        
+        assert(approxEqual(0.7321963 , gd.massf[0], 1.0e-6)); 
+        assert(approxEqual(0.23281198, gd.massf[1], 1.0e-6));
+        assert(approxEqual(0.0, gd.massf[2], 1.0e-6));
+        assert(approxEqual(0.01160037, gd.massf[3], 1.0e-6));
+        assert(approxEqual(0.02339135, gd.massf[4], 1.0e-6));
+
         return 0;
     } // end main()
 }
